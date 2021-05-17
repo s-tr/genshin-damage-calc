@@ -92,6 +92,23 @@ class RegularDamage(DamageInstance):
 
 		return (dmg, self.elem_, False)
 
+	def as_element(self,elem):
+		return RegularDamage(elem,self.damage_source_,self.multiplier_,self.stat_,self.rx_)
+
+	def as_source(self,source):
+		return RegularDamage(self.elem_,source,self.multiplier_,self.stat_,self.rx_)
+
+	def __mul__(self,amount):
+		return RegularDamage(self.elem_,self.damage_source_,self.multiplier_*amount,self.stat_,self.rx_)
+
+	def __rmul__(self,amount):
+		return self.__mul__(amount)
+
+	def __str__(self):
+		return "RegularDamage({},{},{:.2f}% {})".format(
+			self.elem_.name,self.damage_source_.name,self.multiplier_*100, self.stat_.name)
+
+
 class TransformativeReaction(DamageInstance):
 	"""
 	Represents transformative reaction damage (Swirl, ElectroCharge, etc)
@@ -103,7 +120,10 @@ class TransformativeReaction(DamageInstance):
 		# unimplemented
 		return (0, Element.ALL, True)
 
-
+class DebugInstance(DamageInstance):
+	def calculate_base_damage(self, stat_line):
+		print(stat_line)
+		return (0,Element.PYRO,True)
 
 class Buff(GameEvent):
 	"""
@@ -156,6 +176,43 @@ class ConditionalBuff(Buff):
 			amount = x[1]
 			stat_line.add(stat, amount)
 
+
+	def __mul__(self,amount):
+		"""
+		Multiplication defined for convenience.
+		"""
+		new_buff_list=[]
+		for buff in self.buff_list_:
+			new_buff_list.append(buff[0],buff[1]*amount)
+		return ConditionalBuff(new_buff_list,self.elem_,self.damage_source_)
+
+	def __rmul__(self,amount):
+		return self.__mul__(amount)
+
+	def __str__(self):
+		s = ["Increases"]
+		for i,buff in enumerate(self.buff_list_):
+			if i != 0:
+				s.append("and")
+
+			if self.damage_source_ is not None:
+				if self.damage_source_.name is not None:
+					s.append(self.damage_source_.name)
+				else:
+					s.append(str(self.damage_source_)[13:])
+
+			s.append(buff[0].name)
+			s.append("by")
+			s.append(str(buff[1]))
+		if self.elem_ is not None:
+			s.append("for")
+			s.append(self.elem_.name)
+			s.append("hits")
+
+		return ' '.join(s)
+
+
+
 class StatConversion(Buff):
 	"""
 	Denotes a conversion of stats to other stats
@@ -185,6 +242,26 @@ class StatConversion(Buff):
 			if amount > limit:
 				amount = limit
 		stat_line.add(self.destination_stat_, amount)
+
+	def __str__(self):
+		s = ["Increases"]
+		s.append(self.destination_stat_.name)
+		s.append("by")
+		s.append("{:.2f}%".format(100*self.factor_))
+		s.append("of")
+		s.append(self.source_stat_.name)
+		if self.limit_stat_ is not None:
+			s.append("limited by")
+			s.append("{:.2f}%".format(100*self.limit_ratio_))
+			s.append("of")
+			s.append(self.limit_stat_.name)
+		return ' '.join(s)
+
+def StatBuff(stat, amount):
+	"""
+	Constructs a buff that raises the specified stat by the specified amount unconditionally.
+	"""
+	return ConditionalBuff([[stat,amount]])
 
 class EndBuff(GameEvent):
 	def __init__(self, buff):
